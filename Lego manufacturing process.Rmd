@@ -1,0 +1,148 @@
+---
+title: "Lego manufacturing process"
+author: "Melissa Beras"
+date: "3/11/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("qcc")
+install.packages("SixSigma")
+```
+
+**Proceso de Manufactura de un LEGO**
+
+Los pasos correspondientes al proceso de manufactura fueron tomados de la página oficial de LEGO y agregando algunas informaciones para fines del enriquecimiento del ejercicio. En adición, los datos de las variables cuantitativas fueron simulados asumiendo una distribución normal. 
+
+Se tomará como ejemplo un lego sencillo, compuesto por el cilindro que representa una cara, el rostro pintado y el botón que permite hacer el ensamble con otras piezas.
+
+**Mapa de procesos**
+```{r}
+#Entradas, salidas y etapas del proceso
+
+inputs <- c("Molde", "Máquina inyectora", "Pellets de plástico")
+
+outputs <- c("Altura del cilindro", "Diámetro del cilindro", "Espesor del cilindro", "Diámetro del botón", "Altura del botón", "Intensidad del color", "Bordes suaves", "Nitidez", "Tiempo")
+
+steps <- c("Moldeo LEGO", "Estampa LEGO", "Empaque")
+
+#Elementos de entrada/salida de cada proceso
+
+io <- list()
+io[[1]] <- list("X's")
+io[[2]] <- list("Lego","Tinta", "Máquina de estampa")
+io[[3]] <- list("Lego estampado", "Operador", "Bolsa", "Caja")
+
+#Lista de parámetros 
+
+param <- list()
+
+param[[1]] <- list(c("Temperatura -inyección", "Cr"),
+                   c("Presión - inyección","Cr"),
+                   c("Viscosidad del plástico", "N"),
+                   c("Temperatura - molde", "Cr"),
+                   c("Tiempo - enfiramiento","Cr"),
+                   c("Color del plástico", "N"),
+                   c("Dimensiones del molde","N"))
+
+param[[2]] <- list(c("Temperatura - estampado", "Cr"),
+                   c("Presión - estampado","Cr"),
+                   c("Color de la tinta", "N"),
+                   c("Viscosidad de la tinta", "N"),
+                   c("Temperatura de secado","C"),
+                   c("Tiempo de secado", "N"))
+
+param[[3]] <- list(c("Operador", "C"),
+                   c("Resistencia de la caja","N"),
+                   c("Tamaño de la caja", "N"),
+                   c("Tamaño de la bolsa", "N"))
+
+#Lista de salidas
+
+y <- list()
+y[[1]] <- list("Altura del cilindro", "Diámetro del cilindro", "Espesor del cilindro", "Diámetro del botón", "Altura del botón", "Intensidad del color", "Bordes suaves")
+y[[2]] <- list("Nitidez")
+y[[3]] <- list("Tiempo")
+
+#Representación del mapa de procesos
+
+library(SixSigma)
+ss.pMap(steps, inputs, outputs,
+        io, param, y,
+        sub = "Proceso de Manufactura de LEGO")
+```
+
+**Diagrama de Ishikawa**
+Para fines del diagrama de Ishikawa, se tomará el CTQ (Característica crítica para la calidad) de "Diámetro del botón" y se evaluará el efecto "Botón fuera de dimensión".
+
+```{r}
+library(SixSigma)
+
+#Diagrama de Ishikawa
+  
+effect <- "Botón fuera de dimensión"
+causes.gr <- c("Medio ambiente", "Materia prima", "Medición", 
+  "Método/Proceso", "Maquinaria")
+causes <- vector(mode = "list", length = length(causes.gr))
+causes[1] <- list(c("Temperatura ambiental", "Humedad relativa"))
+causes[2] <- list(c("Viscosidad fuera de especificación", "Resina incorrecta"))
+causes[3] <- list(c("Instrumento no calibrado"))
+causes[4] <- list(c("Temperatura de inyección muy alta o baja",                          "Presión de inyección muy alta o baja", "Tiempo                       de enfriamiento insuficiente"))
+causes[5] <- list(c("Molde desgastado"))
+
+ss.ceDiag(effect, causes.gr, causes, sub = "Proceso de Manufactura de LEGO")
+```
+
+
+**Diagrama de Pareto**
+El diagrama de Pareto mostrado debajo, identifica las pocas causas vitales (correspondiente al 80% de los datos) y las separa de las muchas triviales. Este se construye a partir de data histórica, lo que permite asignar una frecuencia a cada causa, es decir, la cantidad de veces que, por ejemplo, un botón fuera de dimensión fue provocado por esa causa en particular.
+
+De acuerdo a la gráfica y al análisis de la salida de R, las causas que se pueden asignar al 80% del defecto son: 
+
+* Temperatura de inyección muy alta o baja.
+* Presión de inyección muy alta o baja.
+* Molde desgastado
+
+```{r}
+
+#Diagrama de Pareto
+
+library(qcc)
+defect <- c(8, 6, 15, 1, 2, 102, 95, 25, 53)
+names(defect) <- c("Temperatura ambiental", "Humedad relativa", "Viscosidad fuera de especificación", "Resina incorrecta", "Instrumento no calibrado", "Temperatura de inyección muy alta o baja", "Presión de inyección muy alta o baja", "Tiempo de enfriamiento insuficiente", "Molde desgastado")
+pareto.chart(defect, ylab = "Error frequency", col=rainbow(length(defect)))
+```
+
+**Gage R&R**
+Se simularon datos para la medición del diámetro del botón del LEGO.
+Tomando en consideración 3 operarios, midiendo 10 piezas en 2 corridas (20 mediciones por operarios, para un total de 60 mediciones). Se consideró que cada operario utilizó el mismo instrumento calibrado, para fines de aislar ese efecto. 
+
+Las dimensiones se presentan en milímetros.
+
+```{r}
+library(SixSigma)
+Operario <- factor(rep(1:3, each = 20))
+Pieza <- factor(rep(rep(1:10, each = 2), 3))
+Run <- factor(rep(1:2, 30))
+
+set.seed(123)
+Diametro <- c(runif(20, 0.2, 0.3),runif(20, 0.2, 0.3), runif(20, 0.1, 0.2))
+
+Boton$Diametro <- Diametro
+
+ss.rr(var=Diametro, part=Pieza, appr=Operario, data=Boton, method="crossed", main="Gage R&R: Diámetro del Botón de LEGO", signifstars=TRUE)
+
+
+```
+
+
+
+**Referencias**
+
+* Proceso de manufactura de LEGO:
+
+https://www.lego.com/es-es/service/help/fun-for-fans/behind-the-scenes/brick-facts/how-are-lego-toys-made-blt0cb8fe682c26474e
+
+
+
