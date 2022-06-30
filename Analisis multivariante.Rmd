@@ -1,0 +1,241 @@
+---
+title: 'Análisis Multivariante'
+author: "Melissa Beras"
+date: "4/8/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Ejercicio #1 
+
+## Descripción de los datos
+
+El conjunto de datos a ser utilizado para fines del análisis descriptivo multivariante contiene información sobre los clientes que visitan un centro comercial. Este set de datos incluye 5 variables correspondientes a identificación del cliente, género, edad, ingreso anual y puntaje de gasto.
+
+## Análisis multivariante
+
+```{r}
+#Lectura de datos
+
+mall <- read.csv("Mall_Customers.csv", col.names=c("ID", "Genero", "Edad","Ingreso.anual", "Puntaje.gasto"))
+
+#Diagrama de dispersión
+
+library(scatterplot3d)
+scatterplot3d(mall[, 3:5], color = "darkgreen", main = "Diagrama de dispersión 3D", pch=16)
+
+#Histograma sobre ingreso anual
+hist(mall$Ingreso.anual, main="Histograma: Ingreso anual", col="lightblue", xlab="Ingreso anual", ylab="Frecuencia")
+
+#Matriz de dispersión (variables cualitativas)
+library(car)
+scatterplotMatrix(mall[, 3:5], diagonal =list(method ="histogram",breaks="FD"), smooth = FALSE, regLine = FALSE, col="darkgreen")
+
+#Matriz de dispersión (+ variable categórica)
+
+coplot(Puntaje.gasto ~ Ingreso.anual | Genero, data = na.omit(mall), col="darkgreen", pch=16)
+
+#Media de los datos
+
+colMeans(mall[,3:5])
+summary(mall)
+
+#Matriz de covarianza muestral corregida
+
+n <- nrow(mall)
+(n-1)/n*cov(mall[,3:5])
+
+#Matriz de correlación muestral
+
+cor(mall[,3:5])
+
+```
+
+Al explorar la posible relación entre las variables cualitativas mediante el diagrama de dispersión, se puede observar cómo el puntaje de gasto está más elevado para el grupo de edad menor (aproximadamente por debajo de 40 años). También se observa que la mayoría de los datos se corresponden con un ingreso anual menor a 80,000 dólares para todas las edades (esto se puede corroborar al hacer un histograma para la variable Ingreso).
+
+En la matriz de dispersión, no se observa ninguna relación lineal entre las variables, lo cual se confirma al realizar la matriz de covarianza y correlación.
+
+Al incluir la varianle cualitativa género en la matriz de dispersión, no se observa ninguna diferencia evidente en la forma en que se distribuyen o relacionan la variable puntaje de gasto frente al ingreso anual. 
+
+
+
+
+
+# Ejercicio #2
+
+## Lectura de datos
+
+```{r}
+produccion <- read.table("produccion.txt", header = TRUE)
+consumo <- read.table("consumo.txt", header = TRUE)
+```
+
+#Acapite a)
+Se desea determinar si existen diferencias significativas entre los dos tipos de bienes. Realiza el contraste correspondiente y comenta los resultados obtenidos. Verifica si se cumplen las hipótesis sobre las que se establece el contraste que has llevado a cabo. Justica todas las respuestas.
+
+
+```{r}
+#Contraste de normalidad
+
+#Test de kurtosis y asimetría
+library(MVN)
+mvn(produccion, mvnTest="mardia")
+mvn(consumo, mvnTest = "mardia")
+
+#Contraste sobre el vector de medias
+n1 <- nrow(produccion) #bienes de produccion
+n2 <- nrow(consumo) #bienes de consumo
+
+x1 <- colMeans(produccion) #vector de medias 
+x2 <- colMeans(consumo) #vector de medias
+
+S1 <- cov(produccion) #Matriz de covarianza
+S2 <- cov(consumo) #Matriz de covarianza
+
+Sp <- (n1-1)*S1 + (n2-1)*S2/(n1 + n2 - 2) #Estimador de matriz de covarianza comun
+
+#Valor del estadistico 
+estad <- n1 * n2/(n1 + n2) * t(x1 - x2) %*% solve(Sp) %*% (x1 - x2) 
+estad
+
+#Transformación del estadístico a f de snedecor
+d <- dim(produccion)[2]
+f <- (n1 + n2 - d - 1)/((n1 + n2 - 2) * d) * estad
+f
+
+pval <- 1-pf(f,d,n1+n2-d-1)
+pval
+```
+De acuerdo con los resultados expuestos anteriormente, no se puede rechazar la hipótesis nula de normalidad para ninguna de las muestras ya que todos los p-valores resultaron elevados, por encima del nivel de significación de 0.05. No se realizó prueba de shapiro wilks ya que las muestras no superan el mínimo de 12 observaciones requerido por la función.
+
+En adición, al comparar el vector de medias de los bienes de producción y los bienes de consumo, se obtiene un estadístico de 0.54, y un p-valor de 0.708. Por tanto, no se rechaza la hipótesis nula de igualdad de medias y se concluye que no existe diferencia significativa entre los bienes.
+
+
+
+
+#Acapite b)
+Determina la longitud y las direcciones de los ejes del elipsoide de confianza al 95% para las medias de las cuatro variables analizadas en los bienes de consumo
+
+```{r}
+#Longitud de los ejes de confianza al 95%, bienes de consumo
+n <- dim(consumo)[1]
+d <- dim(consumo)[2]
+s <- (n-1)/n*cov(consumo)
+alpha <- 0.05
+
+#Longitud de los ejes
+sqrt(eigen(s)$val)*sqrt(d/(n-d)*qf(1-alpha,d,n-d))
+
+#Direccion de los ejes, bienes de consumo:
+eigen(s)$vec
+
+```
+#Acapite c)
+Determina los intervalos de confianza para los valores medios de las cuatro variables en los bienes de consumo obtenidos por el método de Bonferroni y compáralos con los que se obtendrían por el método de Scheffé.
+
+```{r}
+#Intervalos de confianza, método de Scheffé
+
+#Función para calcular límite inferior
+
+limite.inf.s <- function (data,alpha) {
+  d <- dim(data)[2]
+  n <- dim(data)[1]
+  S <- (n-1)/n*cov(data)
+  xbar <- colMeans(data)
+  Lm <- vector(mode="numeric",d)
+  a <- vector(mode="numeric",d)
+  for (i in 1:d) {
+    a <- rep(0,d)
+    a[i] <- 1
+    Lm[i] <- t(a)%*%xbar-sqrt(d/(n-d)*qf(1-alpha,d,n-d)*t(a)%*%S%*%a)
+  } 
+  return(Lm)
+}
+
+Lm.inf <- limite.inf.s(consumo,0.05)
+
+#Función para calcular límite superior
+
+limite.sup.s <- function (data,alpha) {
+  d <- dim(data)[2]
+  n <- dim(data)[1]
+  S <- (n-1)/n*cov(data)
+  xbar <- colMeans(data)
+  Lm <- vector(mode="numeric",d)
+  a <- vector(mode="numeric",d)
+  for (i in 1:d) {
+    a <- rep(0,d)
+    a[i] <- 1
+    Lm[i] <- t(a)%*%xbar+sqrt(d/(n-d)*qf(1-alpha,d,n-d)*t(a)%*%S%*%a)
+  } 
+  return(Lm)
+}
+
+Lm.sup <- limite.sup.s(consumo,0.05)
+
+
+#Intervalos de confianza, método de Scheffé
+
+data.frame(Lm.inf,Lm.sup,row.names=c("x1","x2","X3","x4"))
+
+
+```
+```{r}
+#Intervalos de confianza, método de Bonferroni
+
+#Función para calcular límite inferior
+
+limite.inf.b <- function (data,alpha) {
+  d <- dim(data)[2]
+  n <- dim(data)[1]
+  m <- 8
+  S <- cov(data)
+  xbar <- colMeans(data)
+  Lm <- vector(mode="numeric",d)
+  a <- vector(mode="numeric",d)
+  for (i in 1:d) {
+    a <- rep(0,d)
+    a[i] <- 1
+    Lm[i] <- t(a)%*%xbar- qt(1-alpha/m,n-1)*(sqrt(t(a)%*%S%*%a)/sqrt(n))
+  } 
+  return(Lm)
+}
+
+
+limite.sup.b <- function (data,alpha) {
+  d <- dim(data)[2]
+  n <- dim(data)[1]
+  m <- 8
+  S <- cov(data)
+  xbar <- colMeans(data)
+  Lm <- vector(mode="numeric",d)
+  a <- vector(mode="numeric",d)
+  for (i in 1:d) {
+    a <- rep(0,d)
+    a[i] <- 1
+    Lm[i] <- t(a)%*%xbar+ qt(1-alpha/m,n-1)*(sqrt(t(a)%*%S%*%a)/sqrt(n))
+  } 
+  return(Lm)
+}
+
+
+
+Lm.inf <- limite.inf.b(consumo,0.05)
+Lm.sup <- limite.sup.b(consumo,0.05)
+
+
+#Intervalos de confianza, método de Bonferroni
+
+data.frame(Lm.inf,Lm.sup,row.names=c("x1","x2","X3","x4"))
+
+```
+
+Se obtienen intervalos de confianza más cerrados/pequeños con el método de Bonferroni, puesto que para cada intervalo individual se utiliza un nivel de confianza mayor al nivel de confianza esperado para el intervalo de confianza global.
+
+
+
+
