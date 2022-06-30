@@ -1,0 +1,235 @@
+---
+title: "Muestreo"
+output: pdf_document
+toc: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(RcmdrPlugin.sampling)
+library(survey)
+library(car)
+```
+
+\newpage
+
+# Ejercicio 1
+Con la población grande que habéis generado en la primera práctica y utilizando las fórmulas de teoría y lo visto en esta práctica, realizar las siguientes operaciones.
+
+## Acápite a
+**Seleccionar una variable continua de interés y otra variable cualitativa que os servirá para definir los estratos.** 
+
+
+Se seleccionará *Ingresos* como variable continua y se realizarán los estratos en base a la variable cualitativa *rango de edad*. Por estudios realizados previamente, se observó que el nivel de ingresos se distribuye normalmente para cada rango de edad, variando entre grupos su media y desviación típica, por lo que tendríamos individuos homogéneos dentro de cada estrato pero los estratos serían heterogéneos. 
+
+
+```{r}
+#Lectura de datos
+load("datos.RData")
+lv <-c("Menor de 14","14 a 17","18 a 30","31 a 55","Mayor de 55")  
+datos$Rango.Edad <- factor(datos$Rango.Edad, levels=lv)
+
+summary(datos)
+
+```
+
+
+## Acápite b
+**Estimar el tamaño muestral para seleccionar una muestra estratificada sin reemplazamiento con un nivel de confianza del 95 %. Fijar un nivel de error absoluto conveniente en función de los valores de la variable.** 
+
+Para fines de estimar el tamaño muestral, se considerará un error absoluto de 1000 y se utilizará la siguiente expresión:
+
+$\frac{\sum_{h=1}^{k} (\frac{Nh}{N}) Sh^2} {\frac{e}{Z1-\alpha/2}^{2} + \frac{1}{N}\sum_{h=1}^{k} (\frac{Nh}{N}) Sh^2  }$ 
+
+\ 
+
+```{r}
+Nh <- data.frame(table(datos$Rango.Edad)) #tamaño de cada estrato
+N <- nrow(datos)                          #tamaño poblacional
+e <- 1000/qnorm(1-0.05/2)                 #error absoluto + nivel de confianza al 95%
+
+#Cuasivarainzas para cada estrato
+
+varh <- vector("numeric",5)
+
+for (i in 1:5) {
+varh[i] <- var(datos$Ingresos[datos$Rango.Edad==lv[i]])
+}
+
+
+#Calculo del tamaño muestral
+nd <- vector("numeric",5)
+
+for (i in 1:5) {
+nd[i] <- (Nh$Freq[i]/N)*varh[i]
+}
+
+nd <- sum(nd)
+n <- ceiling(nd/(e^2 + nd/N))
+
+```
+
+Se requiere un tamaño muestral de 137 para cumplir con un nivel de confianza de 95% y el error absoluto propuesto de 1000.
+
+
+
+## Acápite c
+**Seleccionar una muestra estratificada de la población del tamaño calculado anteriormente y con afijación proporcional. Con esta muestra estimar el valor medio, la varianza y un intervalo de confianza al 95% de la variable de interés. (considerar como semilla inicial vuestra fecha de nacimiento en formato DDMMAAAA)** 
+
+
+```{r}
+#Generación de la muestra de tamaño 137
+set.seed(24011995)
+muestra <- StrataSample(data=datos, strata1=3,sstotal=n, ppstype="pro")
+
+#Tamaño muestral de cada estrato
+nh <- data.frame(table(muestra$Rango.Edad))
+nh
+
+#Asignación de los pesos (pw)
+
+for (j in 1:5) { 
+    muestra$pw[muestra$Rango.Edad==Nh$Var1[j]] <- Nh$Freq[j]/nh$Freq[j]
+  }
+
+#Asignación de la correción por población finita (fpc)
+
+for (j in 1:5) { 
+    muestra$fpc[muestra$Rango.Edad==Nh$Var1[j]] <- Nh$Freq[j]
+  }
+
+#Esquema de muestreo 
+dstrat <- svydesign(id=~1, strata=~Rango.Edad, weights=~pw, fpc=~fpc, data=muestra )
+
+#Estimación de la media poblacional
+m <- svymean(~Ingresos,dstrat,deff="replace")
+coef(m)
+
+#Estimación de la Varianza
+SE(m)^2
+
+#Intervalo de confianza para la media
+Confint(m, level=0.95)
+
+```
+
+Se obtiene los siguientes resultados para la variable ingresos:
+
+**Media:** 16060.61  
+**Intervalo de confianza:** (15201.54, 16919.69)  
+**Varianza:** 192117.1  
+
+
+
+\newpage
+# Ejercicio 2
+Con los datos del ejercicio anterior seleccionar 100 muestras estratificadas de la población y realizar las siguiente tareas:
+
+## Acápite a
+**Para cada muestra calcular la estimación del valor medio y almacenarla en un vector** 
+
+
+```{r}
+#Generación de 100 muestras
+set.seed(24011995)
+mean <- vector("numeric",5)
+
+for (i in 1:100) {
+muestra <- StrataSample(data=datos, strata1=3,sstotal=n, ppstype="pro") 
+  for (j in 1:5) { 
+    muestra$pw[muestra$Rango.Edad==Nh$Var1[j]] <- Nh$Freq[j]/nh$Freq[j]
+    muestra$fpc[muestra$Rango.Edad==Nh$Var1[j]] <- Nh$Freq[j]
+  }
+dstrat <- svydesign(id=~1, strata=~Rango.Edad, weights=~pw, fpc=~fpc, data=muestra) 
+
+mean[i] <- coef(svymean(~Ingresos,dstrat,deff="replace"))
+}
+```
+
+
+
+## Acápite b
+**Realizar un estudio descriptivo del vector generado en el apartado anterior y comentar que le ocurre con respecto al valor poblacional que intenta calcular.** 
+
+Debajo se muestra el resumen de las medidas de posición del vector que contiene las medias estimadas para las 100 muestras generadas.
+
+Se obtuvo una media de 17,233 (muy cercano al valor real de la media, aprox. 17,235). 
+
+En adición, al hacer la diferencia entre el primer y tercer cuartil, se obtiene un rango intercuartílico de 651.752. Como medida de dispersión adicional, se obtiene una desviación típica de 503.33.
+
+```{r}
+summary(mean)         #medidas de posición  
+mean(datos$Ingresos)  #media de la población  
+sd(mean)              #desviación típica  
+
+#rango intercuartilico 
+summary(mean)[5]-summary(mean)[2]
+
+```
+
+De manera gráfica, en el histograma se puede observar como la media de las 100 muestras generadas se distribuye alrededor de la media poblacional real (17,235, marcado en la línea vertical roja), obteniendo valores de mínimo y máximo alineados al error absoluto máximo seleccionado para el cálculo de la muestra (1000)
+
+
+```{r}
+hist(mean, col="lightblue", main="Histograma - 100 muestras", breaks=9)
+abline(v=mean(datos$Ingresos), col="red")
+
+```
+
+## Acápite c
+**Comparar el valor de la varianza obtenida en el estudio del apartado anterior con los valores estudiados durante las clases de teoría** 
+
+Para el cálculo de la varianza teórica se utilizó la siguiente expresión:
+
+$\sum_{h=1}^{k}(\frac{Nh}{N})^2(1-fh)(\frac{Sh^2}{nh})$
+
+Considerando que la afijación del muestreo es proporcional, se utilizará fh=n/N.
+
+Debajo se muestran los valores correspondientes a la varianza estimada y la varianza teórica. Se obtiene una diferencia de 6343.064, siendo mayor la varianza teórica, esto puede deberse al error absoluto permitido.
+
+```{r}
+
+#Calculo de varianza estimada
+vm <- var(mean)
+
+#Calculo de Varianza teórica
+
+vk <- vector("numeric",5)
+fh <- n/N
+for (k in 1:5) {
+  vk[k] <- (Nh$Freq[k]/N)^2*(1-fh)*(var(datos$Ingresos[datos$Rango.Edad==lv[k]]))/(fh*Nh$Freq[k])
+}
+
+vt <- sum(vk) #varianza teórica
+
+data.frame("varianza_estimada"=vm, "varianza_teórica"=vt)
+
+vt-vm        #diferencia entre varianza teórica y estimada
+
+```
+
+
+
+
+## Acápite d
+**Calcular el error de muestreo absoluto que se comete con cada muestra, guardarlo en un vector y realizar un estudio descriptivo del mismo comentando los resultados y relacionándolos con el apartado anterior.** 
+
+Debajo se muestra un histograma sobre los errores absolutos de la estimación de la media. Se observa una distribución aparentemente simétrica, es decir, que la estimación está obteniendo resultados indistintos hacia un error absoluto positivo o negativo.
+
+En adición, mediante el resumen mostrado, se identifica que la media del error absoluto es de 18.16 y que sus mínimos y máximos están muy cercanos al error absoluto definido de 1000 (Min. -1150 y Max. 1174).
+
+Como medida de dispersión, la desviación típica del error absoluto es de 503.33, coincidiendo con la dispersión observada en los valores de las muestras generadas.
+
+```{r}
+error_absoluto <- mean(datos$Ingresos) - mean
+hist(error_absoluto, breaks=10, col="lightblue", main="Histograma - error absoluto")
+
+summary(error_absoluto)
+sd(error_absoluto)
+
+```
+
+
+
+
+
